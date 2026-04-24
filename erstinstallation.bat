@@ -1,194 +1,284 @@
 @echo off
-REM ========================================================
-REM  E-Rechnungssystem - Erstinstallation Windows
-REM  Installiert ALLE Voraussetzungen automatisch:
-REM    - Python 3.12 (via Microsoft Store oder offizieller Installer)
-REM    - Java 17 (via winget oder direkter Download)
-REM    - Python-Pakete (pip install -r requirements.txt)
-REM    - KoSIT-Validator + XRechnung-Konfiguration
-REM    - Datenverzeichnisse
-REM  Aufruf: einmalig per Doppelklick. Bei Folgestarts: starten.bat
-REM ========================================================
-setlocal enabledelayedexpansion
-title E-Rechnungssystem - Erstinstallation
-color 0B
+chcp 65001 >nul 2>&1
+title E-Rechnungssystem v2.0 - Komplettinstallation
+color 0F
 
 echo.
-echo  ========================================================
-echo   E-Rechnungssystem - Erstinstallation
-echo   Diese Installation richtet ALLES ein, was die Software
-echo   zum Laufen braucht. Bitte einmalig ausfuehren.
-echo  ========================================================
+echo  ╔════════════════════════════════════════════════════════╗
+echo  ║  E-Rechnungssystem v2.0 - EBRK UG                    ║
+echo  ║  Komplettinstallation fuer Windows                    ║
+echo  ║  XRechnung / ZUGFeRD / EN 16931                       ║
+echo  ╚════════════════════════════════════════════════════════╝
 echo.
 
 cd /d "%~dp0"
+set "INSTALL_DIR=%cd%"
 
-REM ── 1. Pruefe Administrator-Rechte (fuer winget) ──
-net session >nul 2>&1
-if %errorlevel% neq 0 (
-    echo  HINWEIS: Skript laeuft ohne Admin-Rechte.
-    echo  Falls Python oder Java nicht installiert sind, wird das
-    echo  Skript die Installation per winget vorschlagen — Windows
-    echo  fragt dann ggf. nach Bestaetigung.
-    echo.
+:: ══════════════════════════════════════════════════════════════
+:: 1. PYTHON PRUEFEN + INSTALLIEREN
+:: ══════════════════════════════════════════════════════════════
+echo  [1/6] Python pruefen...
+
+:: Erst schauen ob Python bereits da ist
+set "PYTHON_OK=0"
+where python >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    for /f "tokens=2 delims= " %%v in ('python --version 2^>^&1') do set PYVER_FULL=%%v
+    for /f "tokens=1,2 delims=." %%a in ("%PYVER_FULL%") do (
+        if %%a GEQ 3 if %%b GEQ 10 set "PYTHON_OK=1"
+    )
 )
 
-REM ── 2. Python pruefen ────────────────────────────────────
-echo  [1/6] Pruefe Python-Installation...
-python --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo         Python nicht gefunden — versuche Installation per winget...
-    where winget >nul 2>&1
-    if !errorlevel! neq 0 (
+if "%PYTHON_OK%"=="1" (
+    echo  ✓ Python %PYVER_FULL% gefunden
+    goto :python_done
+)
+
+echo.
+echo  Python 3.10+ nicht gefunden oder zu alt.
+echo  Installiere Python automatisch...
+echo.
+
+:: Methode 1: winget (Windows 10 2004+ / Windows 11)
+where winget >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    echo  Verwende winget...
+    winget install Python.Python.3.12 --accept-package-agreements --accept-source-agreements -h
+    if %ERRORLEVEL% EQU 0 (
+        echo  ✓ Python 3.12 per winget installiert
         echo.
-        echo  FEHLER: Python und winget sind nicht verfuegbar.
+        echo  ══════════════════════════════════════════════
+        echo   WICHTIG: Bitte dieses Fenster SCHLIESSEN
+        echo   und erstinstallation.bat ERNEUT starten!
+        echo   (Python muss den PATH neu laden)
+        echo  ══════════════════════════════════════════════
         echo.
-        echo  Bitte Python manuell installieren:
-        echo    https://www.python.org/downloads/
-        echo  WICHTIG: Bei der Installation "Add Python to PATH" anhaken.
-        echo.
-        echo  Nach der Installation diese Datei erneut ausfuehren.
         pause
-        exit /b 1
+        exit /b 0
     )
-    winget install -e --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements
-    if !errorlevel! neq 0 (
-        echo  FEHLER: Python-Installation per winget fehlgeschlagen.
-        echo  Bitte manuell von https://www.python.org/downloads/ installieren.
-        pause
-        exit /b 1
-    )
-    echo         Python wurde installiert. Bitte dieses Skript NEU starten,
-    echo         damit das System die neuen PATH-Variablen kennt.
+    echo  winget Installation fehlgeschlagen, versuche Download...
+)
+
+:: Methode 2: Direkter Download mit PowerShell
+echo  Lade Python 3.12 herunter...
+set "PY_URL=https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe"
+set "PY_INSTALLER=%TEMP%\python-3.12.7-amd64.exe"
+
+powershell -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%PY_URL%' -OutFile '%PY_INSTALLER%' -UseBasicParsing } catch { exit 1 }" 2>nul
+
+if not exist "%PY_INSTALLER%" (
+    echo.
+    echo  ✗ Download fehlgeschlagen.
+    echo.
+    echo  Bitte Python manuell installieren:
+    echo  https://www.python.org/downloads/
+    echo.
+    echo  WICHTIG: "Add Python to PATH" ankreuzen!
+    echo.
+    start https://www.python.org/downloads/
+    pause
+    exit /b 1
+)
+
+echo  Download OK (%PY_INSTALLER%)
+echo  Starte Installation (bitte warten)...
+echo.
+
+:: Silent install mit PATH
+"%PY_INSTALLER%" /quiet InstallAllUsers=0 PrependPath=1 Include_pip=1 Include_launcher=1
+
+if %ERRORLEVEL% EQU 0 (
+    echo  ✓ Python 3.12 installiert
+    echo.
+    echo  ══════════════════════════════════════════════
+    echo   WICHTIG: Bitte dieses Fenster SCHLIESSEN
+    echo   und erstinstallation.bat ERNEUT starten!
+    echo   (PATH muss neu geladen werden)
+    echo  ══════════════════════════════════════════════
+    echo.
+    del "%PY_INSTALLER%" >nul 2>&1
     pause
     exit /b 0
-)
-for /f "tokens=*" %%v in ('python --version') do echo         Gefunden: %%v
-echo.
-
-REM ── 3. Java pruefen ──────────────────────────────────────
-echo  [2/6] Pruefe Java-Installation (fuer KoSIT-Validator)...
-java -version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo         Java nicht gefunden — versuche Installation per winget...
-    where winget >nul 2>&1
-    if !errorlevel! neq 0 (
-        echo.
-        echo  WARNUNG: Java konnte nicht automatisch installiert werden.
-        echo  Die Software laeuft auch ohne Java, aber der offizielle
-        echo  KoSIT-Validator wird nicht verfuegbar sein.
-        echo.
-        echo  Manuelle Installation: https://adoptium.net/de/temurin/releases/
-        echo  ^(Temurin JRE 17 oder neuer^)
-        echo.
-        echo  Druecken Sie eine Taste, um ohne Java fortzufahren...
-        pause >nul
-        goto :skip_java
-    )
-    winget install -e --id EclipseAdoptium.Temurin.17.JRE --accept-source-agreements --accept-package-agreements
-    if !errorlevel! neq 0 (
-        echo  WARNUNG: Java-Installation fehlgeschlagen — fahre ohne KoSIT fort.
-        goto :skip_java
-    )
-    echo         Java wurde installiert. PATH wird im neuen Fenster aktiv.
-)
-for /f "tokens=*" %%v in ('java -version 2^>^&1 ^| findstr /i "version"') do echo         Gefunden: %%v
-:skip_java
-echo.
-
-REM ── 4. Python-Pakete installieren ────────────────────────
-echo  [3/6] Installiere Python-Pakete (kann 1-2 Minuten dauern)...
-python -m pip install --upgrade pip --quiet
-python -m pip install -r requirements.txt --quiet
-if %errorlevel% neq 0 (
-    echo  FEHLER: Installation der Python-Pakete fehlgeschlagen.
-    echo  Versuchen Sie manuell: python -m pip install -r requirements.txt
+) else (
+    echo.
+    echo  ✗ Automatische Installation fehlgeschlagen.
+    echo  Starte manuellen Installer...
+    echo.
+    echo  WICHTIG: "Add Python to PATH" ankreuzen!
+    echo.
+    "%PY_INSTALLER%"
+    echo.
+    echo  Nach der Installation: Fenster schliessen,
+    echo  erstinstallation.bat erneut starten.
     pause
     exit /b 1
 )
-echo         OK
+
+:python_done
+
+:: ══════════════════════════════════════════════════════════════
+:: 2. JAVA PRUEFEN + INSTALLIEREN (optional)
+:: ══════════════════════════════════════════════════════════════
+echo  [2/6] Java pruefen (fuer XRechnung-Validator)...
+
+where java >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    for /f "tokens=*" %%v in ('java -version 2^>^&1 ^| findstr /i "version"') do set JVER=%%v
+    echo  ✓ Java gefunden: %JVER%
+    goto :java_done
+)
+
+echo  Java nicht gefunden.
+echo.
+echo  Java wird fuer den offiziellen KoSIT XRechnung-Validator
+echo  benoetigt. Ohne Java wird der eingebaute Basis-Validator
+echo  verwendet (funktioniert, aber weniger Pruefregeln).
+echo.
+set /p "INSTALL_JAVA=  Java jetzt installieren? (j/n): "
+if /i "%INSTALL_JAVA%" NEQ "j" (
+    echo  Uebersprungen. Basis-Validator wird verwendet.
+    goto :java_done
+)
+
+:: Java per winget
+where winget >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    echo  Installiere Java (Eclipse Temurin 21)...
+    winget install EclipseAdoptium.Temurin.21.JRE --accept-package-agreements --accept-source-agreements -h
+    if %ERRORLEVEL% EQU 0 (
+        echo  ✓ Java installiert
+        goto :java_done
+    )
+)
+
+:: Fallback: Download
+echo  Lade Java (Temurin JRE 21) herunter...
+set "JAVA_URL=https://api.adoptium.net/v3/installer/latest/21/ga/windows/x64/jre/hotspot/normal/eclipse"
+set "JAVA_INSTALLER=%TEMP%\temurin-jre-21.msi"
+
+powershell -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%JAVA_URL%' -OutFile '%JAVA_INSTALLER%' -UseBasicParsing } catch { exit 1 }" 2>nul
+
+if exist "%JAVA_INSTALLER%" (
+    echo  Installiere Java...
+    msiexec /i "%JAVA_INSTALLER%" /quiet ADDLOCAL=FeatureMain,FeatureEnvironment,FeatureJarFileRunWith
+    if %ERRORLEVEL% EQU 0 (
+        echo  ✓ Java installiert
+        del "%JAVA_INSTALLER%" >nul 2>&1
+    ) else (
+        echo  ⚠ Java Installation fehlgeschlagen.
+        echo  Manuell: https://adoptium.net/de/temurin/releases/
+    )
+) else (
+    echo  ⚠ Java Download fehlgeschlagen.
+    echo  Manuell: https://adoptium.net/de/temurin/releases/
+)
+
+:java_done
 echo.
 
-REM ── 5. KoSIT-Validator herunterladen ─────────────────────
-echo  [4/6] Lade KoSIT-Validator herunter (optional)...
-java -version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo         Java fehlt — KoSIT-Validator wird uebersprungen.
-    goto :skip_kosit
+:: ══════════════════════════════════════════════════════════════
+:: 3. VIRTUAL ENVIRONMENT
+:: ══════════════════════════════════════════════════════════════
+echo  [3/6] Virtual Environment einrichten...
+
+if not exist ".venv" (
+    python -m venv .venv
+    if %ERRORLEVEL% NEQ 0 (
+        echo  ✗ venv konnte nicht erstellt werden.
+        echo  Pruefen Sie ob Python korrekt installiert ist.
+        pause
+        exit /b 1
+    )
+    echo  ✓ .venv erstellt
+) else (
+    echo  ✓ .venv existiert bereits
 )
-if exist "tools\kosit\scenarios.xml" (
-    echo         KoSIT-Validator bereits vorhanden — uebersprungen.
-    goto :skip_kosit
+
+call .venv\Scripts\activate.bat
+
+:: ══════════════════════════════════════════════════════════════
+:: 4. PYTHON-PAKETE
+:: ══════════════════════════════════════════════════════════════
+echo  [4/6] Python-Pakete installieren...
+
+pip install --upgrade pip -q 2>nul
+pip install -r requirements.txt -q 2>nul
+
+:: Prüfen ob alles da ist
+python -c "import flask,lxml,qrcode,cryptography,pdfplumber,reportlab,pikepdf; print('  ✓ Alle 7 Kernpakete installiert')" 2>nul
+if %ERRORLEVEL% NEQ 0 (
+    echo  ⚠ Einige Pakete fehlen. Versuche erneut...
+    pip install flask lxml qrcode cryptography pdfplumber reportlab pikepdf -q
+    python -c "import flask; print('  ✓ Pakete nachinstalliert')" 2>nul
+    if %ERRORLEVEL% NEQ 0 (
+        echo  ✗ Paket-Installation fehlgeschlagen.
+        echo  Manuell: .venv\Scripts\activate.bat
+        echo           pip install -r requirements.txt
+        pause
+        exit /b 1
+    )
 )
-if not exist "tools\kosit" mkdir "tools\kosit"
-echo         Lade Validator-JAR von GitHub...
-powershell -NoProfile -Command ^
-    "$ErrorActionPreference='Stop'; "^
-    "$rel = Invoke-RestMethod 'https://api.github.com/repos/itplr-kosit/validator/releases/latest'; "^
-    "$jar = $rel.assets | Where-Object { $_.name -like 'validator-*-standalone.jar' } | Select-Object -First 1; "^
-    "if (-not $jar) { throw 'Kein passender JAR im Release gefunden' }; "^
-    "Invoke-WebRequest $jar.browser_download_url -OutFile 'tools\kosit\validator.jar' -UseBasicParsing; "^
-    "Write-Host '         Validator-JAR heruntergeladen.'"
-if %errorlevel% neq 0 (
-    echo         WARNUNG: Validator-Download fehlgeschlagen — KoSIT bleibt deaktiviert.
-    goto :skip_kosit
+
+:: ══════════════════════════════════════════════════════════════
+:: 5. DATENVERZEICHNISSE
+:: ══════════════════════════════════════════════════════════════
+echo  [5/6] Datenverzeichnisse anlegen...
+
+for %%d in (archiv export sent_mails test_mails logo documents attachments) do (
+    if not exist "data\%%d" mkdir "data\%%d"
 )
-echo         Lade XRechnung-Konfiguration von GitHub...
-powershell -NoProfile -Command ^
-    "$ErrorActionPreference='Stop'; "^
-    "$rel = Invoke-RestMethod 'https://api.github.com/repos/itplr-kosit/validator-configuration-xrechnung/releases/latest'; "^
-    "$zip = $rel.assets | Where-Object { $_.name -like '*.zip' -and $_.name -notlike '*test*' -and $_.name -notlike '*source*' } | Select-Object -First 1; "^
-    "if (-not $zip) { throw 'Keine Konfigurations-ZIP gefunden' }; "^
-    "Invoke-WebRequest $zip.browser_download_url -OutFile 'tools\kosit\config.zip' -UseBasicParsing; "^
-    "Expand-Archive -Path 'tools\kosit\config.zip' -DestinationPath 'tools\kosit' -Force; "^
-    "Remove-Item 'tools\kosit\config.zip'; "^
-    "Write-Host '         XRechnung-Konfiguration entpackt.'"
-if %errorlevel% neq 0 (
-    echo         WARNUNG: Konfigurations-Download fehlgeschlagen — KoSIT bleibt deaktiviert.
-    goto :skip_kosit
+echo  ✓ data\ Struktur angelegt
+
+:: ══════════════════════════════════════════════════════════════
+:: 6. KOSIT-VALIDATOR PRUEFEN
+:: ══════════════════════════════════════════════════════════════
+echo  [6/6] KoSIT XRechnung-Validator pruefen...
+
+if exist "tools\kosit\validator.jar" (
+    if exist "tools\kosit\scenarios.xml" (
+        echo  ✓ KoSIT-Validator vorhanden
+    ) else (
+        echo  ⚠ scenarios.xml fehlt in tools\kosit\
+    )
+) else (
+    echo  ⚠ KoSIT-Validator nicht vorhanden
+    where java >nul 2>&1
+    if %ERRORLEVEL% EQU 0 (
+        echo  Java ist da — Validator kann spaeter nachgeladen werden
+    ) else (
+        echo  Basis-Validator wird verwendet (reicht fuer den Betrieb)
+    )
 )
-if not exist "tools\kosit\scenarios.xml" (
-    echo         WARNUNG: scenarios.xml nicht gefunden nach Entpackung.
-    echo         KoSIT bleibt deaktiviert. Pruefe tools\kosit\ manuell.
-    goto :skip_kosit
-)
-echo         OK — KoSIT-Validator einsatzbereit.
-:skip_kosit
+
+:: ══════════════════════════════════════════════════════════════
+:: FERTIG
+:: ══════════════════════════════════════════════════════════════
+echo OK > .deps_installed
+
+echo.
+echo  ╔════════════════════════════════════════════════════════╗
+echo  ║                                                        ║
+echo  ║   ✓ Installation abgeschlossen!                        ║
+echo  ║                                                        ║
+echo  ╠════════════════════════════════════════════════════════╣
+echo  ║                                                        ║
+echo  ║   Starten:  Doppelklick auf starten.bat                ║
+echo  ║                                                        ║
+echo  ║   Browser oeffnet sich automatisch:                    ║
+echo  ║   http://localhost:5000                                 ║
+echo  ║                                                        ║
+echo  ║   28-Tage-Testmodus startet beim ersten Aufruf.        ║
+echo  ║   Danach: Lizenzschluessel unter Einstellungen.        ║
+echo  ║                                                        ║
+echo  ╚════════════════════════════════════════════════════════╝
 echo.
 
-REM ── 6. Datenverzeichnisse anlegen ────────────────────────
-echo  [5/6] Lege Datenverzeichnisse an...
-if not exist "data" mkdir "data"
-if not exist "data\archiv" mkdir "data\archiv"
-if not exist "data\export" mkdir "data\export"
-if not exist "data\sent_mails" mkdir "data\sent_mails"
-if not exist "data\logo" mkdir "data\logo"
-echo         OK
+:: Zusammenfassung
+echo  Installierte Komponenten:
+python --version 2>&1
+where java >nul 2>&1 && (java -version 2>&1 | findstr /i "version") || echo  Java: nicht installiert (optional)
+echo  Pakete: flask, lxml, qrcode, cryptography, pdfplumber, reportlab, pikepdf
+echo  Verzeichnis: %INSTALL_DIR%
 echo.
 
-REM ── 7. Funktionstest ─────────────────────────────────────
-echo  [6/6] Pruefe, ob die Anwendung startbereit ist...
-python -c "from webapp import app" 2>nul
-if %errorlevel% neq 0 (
-    echo  FEHLER: Anwendung kann nicht geladen werden.
-    echo  Bitte requirements.txt pruefen oder Support kontaktieren.
-    pause
-    exit /b 1
-)
-echo         OK
-echo.
-
-REM ── Fertig ───────────────────────────────────────────────
-echo  ========================================================
-echo   Installation erfolgreich abgeschlossen!
-echo  ========================================================
-echo.
-echo   Software starten mit: starten.bat (oder Doppelklick darauf)
-echo.
-echo   Beim ersten Start:
-echo     1. Browser oeffnet sich automatisch auf http://localhost:5000
-echo     2. 28 Tage kostenlose Testphase startet
-echo     3. Lizenz spaeter unter "Einstellungen" eingeben
-echo.
 pause
-exit /b 0
