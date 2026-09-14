@@ -1,62 +1,36 @@
 @echo off
 chcp 65001 >nul 2>&1
 title E-Rechnungssystem
-color 0F
-
 cd /d "%~dp0"
 
-:: ── Erstinstallation? ──
-if not exist ".deps_installed" (
-    echo.
-    echo  Erstmalige Einrichtung erkannt...
-    echo.
-    if exist "erstinstallation.bat" (
-        call erstinstallation.bat
-        if %ERRORLEVEL% NEQ 0 exit /b 1
-    ) else (
-        echo  ✗ erstinstallation.bat nicht gefunden!
-        pause
-        exit /b 1
-    )
-)
+:: Erstinstallation fehlt oder unvollstaendig -> automatisch nachholen
+if not exist ".deps_installed" goto :einrichten
+if not exist ".venv\Scripts\python.exe" goto :einrichten
+".venv\Scripts\python.exe" -c "import flask, pikepdf" >nul 2>&1 || goto :einrichten
+goto :start
 
-:: ── Python prüfen ──
-where python >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo.
-    echo  ✗ Python nicht gefunden!
-    echo  Bitte erstinstallation.bat erneut ausfuehren.
-    echo.
-    del .deps_installed >nul 2>&1
+:einrichten
+echo.
+echo  Erstmalige Einrichtung - das dauert einige Minuten...
+echo.
+call erstinstallation.bat --still
+if errorlevel 1 (
     pause
     exit /b 1
 )
 
-:: ── venv prüfen + aktivieren ──
-if not exist ".venv\Scripts\activate.bat" (
-    echo  .venv beschaedigt — erstelle neu...
-    python -m venv .venv
+:start
+:: Java aus dem Programmordner fuer den KoSIT-Validator
+if exist "laufzeit\java\bin\java.exe" (
+    set "JAVA_HOME=%CD%\laufzeit\java"
+    set "PATH=%CD%\laufzeit\java\bin;%PATH%"
 )
-call .venv\Scripts\activate.bat
-
-:: ── Flask prüfen ──
-python -c "import flask" >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo  Pakete fehlen — installiere nach...
-    pip install -r requirements.txt -q 2>nul
-)
-
-:: ── Starten ──
 echo.
-echo  ╔════════════════════════════════════════════════════════╗
-echo  ║  E-Rechnungssystem                                  ║
-echo  ║  XRechnung / ZUGFeRD / EN 16931                       ║
-echo  ╚════════════════════════════════════════════════════════╝
+echo  ════════════════════════════════════════════════════════
+echo   E-Rechnungssystem  -  XRechnung / ZUGFeRD / EN 16931
+echo  ════════════════════════════════════════════════════════
+echo   Der Browser oeffnet sich automatisch.
+echo   Zum Beenden: Strg+C oder dieses Fenster schliessen.
 echo.
-echo  Server startet auf http://localhost:5000
-echo  Browser oeffnet sich automatisch.
-echo  Zum Beenden: Strg+C oder Fenster schliessen.
-echo  ────────────────────────────────────────────────────────
-echo.
-
-python run.py %1
+".venv\Scripts\python.exe" run.py %*
+pause
